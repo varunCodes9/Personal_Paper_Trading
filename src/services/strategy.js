@@ -1,5 +1,7 @@
 import News from '../models/News.js';
-import { getRSI } from './market-data.js';
+import { getRSI } from './market-data.js';import yahooFinance from 'yahoo-finance2';
+import { SMA, MACD } from 'technicalindicators';
+import * as ta from 'technicalindicators'
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 
@@ -20,13 +22,13 @@ export async function evaluateStock(symbol) {
     // Get technical indicator (RSI)
     const rsiData = await getRSI(symbol);
     if (!rsiData || rsiData.length < 3) { // Need at least 3 data points for trend
-      logger.warn(`Insufficient RSI data available for ${symbol}`);
-      return 'HOLD';
+        logger.warn(`Insufficient RSI data available for ${symbol}`);
+        return 'HOLD';
     }
-    
+
     // Get current RSI and analyze trend
     const currentRSI = rsiData[rsiData.length - 1];
-    const rsiTrend = analyzeRsiTrend(rsiData.slice(-5)); // Last 5 days for trend
+    const rsiTrend = analyzeRsiTrend(rsiData.slice(-5)); // Last 5 days for trend    
     
     logger.debug(`Current RSI for ${symbol}: ${currentRSI}, Trend: ${rsiTrend}`);
 
@@ -34,22 +36,22 @@ export async function evaluateStock(symbol) {
     const sentimentData = await getNewsSentiment(symbol);
     const { avgSentiment, newsCount, recentTrend } = sentimentData;
     
-    logger.debug(`Sentiment for ${symbol}: ${avgSentiment} (${newsCount} news items), Trend: ${recentTrend}`);
+        logger.debug(`Sentiment for ${symbol}: ${avgSentiment} (${newsCount} news items), Trend: ${recentTrend}`);
 
-    // Enhanced strategy rules with more conditions
-    const isStronglyOversold = currentRSI < 25;
-    const isOversold = currentRSI < 30;
-    const isStronglyOverbought = currentRSI > 75;
-    const isOverbought = currentRSI > 70;
-    
-    const isStrongBullish = avgSentiment > 0.5;
-    const isBullish = avgSentiment > 0.2;
-    const isStrongBearish = avgSentiment < -0.5;
-    const isBearish = avgSentiment < -0.2;
-    
-    const hasSufficientNews = newsCount >= 3;
-    const hasHighVolumeNews = newsCount >= 5;
-    
+        // Enhanced strategy rules with more conditions
+        const isStronglyOversold = currentRSI < 25;
+        const isOversold = currentRSI < 30;
+        const isStronglyOverbought = currentRSI > 75;
+        const isOverbought = currentRSI > 70;
+
+        const isStrongBullish = avgSentiment > 0.5;
+        const isBullish = avgSentiment > 0.2;
+        const isStrongBearish = avgSentiment < -0.5;
+        const isBearish = avgSentiment < -0.2;
+
+        const hasSufficientNews = newsCount >= 3;
+        const hasHighVolumeNews = newsCount >= 5;
+
     // Create decision matrix with strength signals
     const decision = determineTradeDecision({
       rsi: { current: currentRSI, trend: rsiTrend },
@@ -71,6 +73,66 @@ export async function evaluateStock(symbol) {
     // Fail-safe - when in doubt, hold
     return 'HOLD';
   }
+}
+
+/**
+ * Generates a trading signal (BUY, SELL, HOLD) based on moving averages and RSI.
+ *
+ * @param {string} symbol - The stock symbol.
+ * @param {number} shortTermPeriod - The period for the short-term moving average.
+ * @param {number} longTermPeriod - The period for the long-term moving average.
+ * @param {number} rsiPeriod - The period for RSI calculation.
+ * @returns {Promise<string>} - The trading signal.
+ */
+export async function getTradingSignal(symbol, shortTermPeriod, longTermPeriod, rsiPeriod) {
+    try {
+      const { quotes } = await yahooFinance.chart(`${symbol}.NS`, {
+        period1: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        period2: new Date().toISOString().split('T')[0],
+        interval: '1d'
+      });
+  
+      const closes = quotes.map(q => q.close);
+      const shortTermMA = SMA.calculate({ values: closes, period: shortTermPeriod });
+      const longTermMA = SMA.calculate({ values: closes, period: longTermPeriod });
+      const rsiData = await getRSI(symbol, rsiPeriod);
+  
+      const currentShortTermMA = shortTermMA[shortTermMA.length - 1];
+      const currentLongTermMA = longTermMA[longTermMA.length - 1];
+      const currentRSI = rsiData[rsiData.length - 1];
+  
+      const shortTermMA_previous = shortTermMA[shortTermMA.length - 2];
+      const longTermMA_previous = longTermMA[longTermMA.length - 2];
+      // Check if the short-term MA crossed above the long-term MA
+      const isMACrossedAbove = shortTermMA_previous < longTermMA_previous && currentShortTermMA > currentLongTermMA;
+  
+      // Calculate MACD
+      const macdInput = {
+        values: closes,
+        fastPeriod: 12,
+        slowPeriod: 26,
+        signalPeriod: 9,
+        SimpleMAOscillator: false,
+        SimpleMASignal: false
+      };      
+      const macdOutput = MACD.calculate(macdInput);
+  
+      const currentMACD = macdOutput[macdOutput.length - 1];
+      const isMACDBelowSignal = currentMACD.MACD < currentMACD.signal;
+
+        // Check if the short-term MA crossed below the long-term MA
+        const isMACrossedBelow = shortTermMA_previous > longTermMA_previous && currentShortTermMA < currentLongTermMA;
+
+        const isMACDAboveSignal = currentMACD.MACD > currentMACD.signal;
+
+        if (isMACrossedAbove && currentRSI < 30 && isMACDAboveSignal) return 'BUY';
+        if (isMACrossedAbove && currentRSI < 30) return 'BUY';
+        if (isMACrossedBelow && currentRSI > 70) return 'SELL';
+        return 'HOLD';
+    } catch (error) {
+        logger.error(`Error evaluating ${symbol}:`, error);
+        return 'HOLD';
+    }
 }
 
 /**

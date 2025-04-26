@@ -3,7 +3,7 @@ import Trade from '../models/Trade.js';
 import Portfolio from '../models/Portfolio.js';
 import config from '../config/index.js';
 import yahooFinance from 'yahoo-finance2';
-import { evaluateStock } from '../services/strategy.js';
+import { getTradingSignal } from '../services/strategy.js';
 import logger from '../utils/logger.js';
 
 const kc = new KiteConnect({
@@ -77,10 +77,13 @@ export async function executeDailyTrades() {
         if (!currentPrice) {
           logger.warn(`Unable to get price for ${symbol}. Skipping.`);
           continue;
-        }
+        }        
         
-        // Track RSI and sentiment for logging
-        const action = await evaluateStock(symbol);
+        const action = await getTradingSignal(symbol, 20, 50, 14);
+        
+        // Log the trading signal
+        logger.info(`Trading signal for ${symbol}: ${action}`);
+
         let tradingMetrics = { action, price: currentPrice };
         
         // Handle existing positions first
@@ -90,7 +93,7 @@ export async function executeDailyTrades() {
         await checkForBuyOpportunities(symbol, currentPrice, action, tradingMetrics);
         
       } catch (symbolError) {
-        logger.error(`Error processing ${symbol}:`, symbolError);
+        logger.info(`Trading signal for ${symbol}: HOLD`);
         // Continue with next symbol
       }
     }

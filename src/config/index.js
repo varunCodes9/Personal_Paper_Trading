@@ -5,7 +5,7 @@ export default {
       API_KEY: process.env.ZERODHA_API_KEY,
       ACCESS_TOKEN: process.env.ZERODHA_ACCESS_TOKEN
     },
-    WATCHLIST: process.env.WATCHLIST.split(','),
+    WATCHLIST: process.env.WATCHLIST ? process.env.WATCHLIST.split(',') : ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK'],
     RISK_PERCENT: parseFloat(process.env.RISK_PERCENT),
     CAPITAL: 10000 // ₹10k virtual
   };
