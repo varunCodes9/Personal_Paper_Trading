@@ -1,42 +1,7 @@
-// import fs from 'fs/promises';
-// import News from '../models/News.js';
-// import config from '../config/index.js';
-
-// const POSITIVE_KEYWORDS = ['profit', 'growth', 'acquires'];
-// const NEGATIVE_KEYWORDS = ['loss', 'fraud', 'cut'];
-
-// export async function processNews() {
-//   // Read news.txt
-//   const data = await fs.readFile('news.txt', 'utf-8');
-//   const headlines = data.split('\n').filter(line => line.trim());
-
-//   // Calculate sentiment
-//   const newsDocs = headlines.map(headline => {
-//     let score = 0;
-//     const lowerHeadline = headline.toLowerCase();
-    
-//     POSITIVE_KEYWORDS.forEach(word => {
-//       if (lowerHeadline.includes(word)) score += 0.5;
-//     });
-    
-//     NEGATIVE_KEYWORDS.forEach(word => {
-//       if (lowerHeadline.includes(word)) score -= 0.5;
-//     });
-    
-//     score = Math.min(1, Math.max(-1, score)); // Clamp
-    
-//     return new News({ headline, sentiment: score });
-//   });
-
-//   // Save to DB
-//   await News.insertMany(newsDocs);
-//   return newsDocs;
-// }
-
 import fs from 'fs';
 import News from '../models/News.js';
 import logger from '../utils/logger.js';
-import config from '../config/index.js';
+import config from '../config/index.js'; // Import config
 
 const POSITIVE_KEYWORDS = ['profit', 'profits', 'growth', 'growing', 'acquires', 'acquisition', 'upgrade', 'record high', 'wins', 'secured'];
 const NEGATIVE_KEYWORDS = ['loss', 'losses', 'fraud', 'cut', 'downgrade', 'lawsuit', 'penalty'];
@@ -104,6 +69,6 @@ export async function processNews() {
 // Helper function - implement based on your news format
 function extractSymbolFromHeadline(headline) {
   // Example: "RELIANCE reports 20% profit growth" → "RELIANCE"
-  const symbols = ['RELIANCE', 'TCS']; // Your watchlist
+  const symbols = config.WATCHLIST; // Use the configured watchlist
   return symbols.find(symbol => headline.includes(symbol));
 }
