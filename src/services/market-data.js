@@ -1,50 +1,78 @@
-import yahooFinance from 'yahoo-finance2';
-import { RSI } from 'technicalindicators';
+import config from '../config/index.js';
+import moment from 'moment-timezone';
+import logger from '../utils/logger.js';
 
-let transactionIdCounter = 1;
-const transactions = [];
+class SymbolData {
+  constructor(symbol) {
+    this.symbol = symbol;
+    this.priceHistory = [];
+  }
 
-export function getTransactions() {
-    return transactions;
+  updatePrice(price) {
+    const timestamp = Date.now();
+    this.priceHistory.push({ timestamp, price });
+    // Keep only the last 2 minutes of data
+    this.priceHistory = this.priceHistory.filter(item => item.timestamp >= timestamp - 120000);
+  }
+
+  getLatestPrice() {
+    return this.priceHistory.length > 0 ? this.priceHistory[this.priceHistory.length - 1].price : null;
+  }
+
+  getLastMinutePrice() {
+    const oneMinuteAgo = Date.now() - 60000;
+    const lastMinuteData = this.priceHistory.filter(item => item.timestamp >= oneMinuteAgo);
+    return lastMinuteData.length > 0 ? lastMinuteData[0].price : null;
+  }
 }
 
-export function addTransaction(transaction) {
-    const newTransaction = {
-        transaction_id: transactionIdCounter++,
-        type: transaction.type,
-        stock_name: transaction.stock_name,
-        price: transaction.price,
-        quantity: transaction.quantity,
-        date: transaction.date,
-    };
-    transactions.push(newTransaction);
-    return newTransaction;
-}
+class MarketDataService {
+  constructor() {
+    this.isMarketOpen = false;
+    this.symbolsData = {};
+    this.initializeSymbols();
+    this.simulateMarketData();
+    this.checkMarketHours(); // Check market hours at startup
+    setInterval(() => this.checkMarketHours(), 60000); // Check every minute
+  }
 
-export async function getRSI(symbol, period = 14) {
-    try {
-        // Get 3 months of daily data (enough for RSI calculation)
-        const { quotes } = await yahooFinance.chart(`${symbol}.NS`, {
-            period1: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            period2: new Date().toISOString().split('T')[0],
-            interval: '1d'
-        });
+  initializeSymbols() {
+    config.WATCHLIST.forEach(symbol => {
+      this.symbolsData[symbol] = new SymbolData(symbol);
+    });
+  }  
 
-        if (!quotes || quotes.length === 0) {
-            throw new Error('No price data available');
-        }
+  simulateMarketData() {
+    setInterval(() => {
+      if (!this.isMarketOpen) return;
+      config.WATCHLIST.forEach(symbol => {
+        const newPrice = Math.random() * (160 - 150) + 150; // Random price between 150 and 160
+        this.symbolsData[symbol].updatePrice(newPrice);        
+      });
+    }, 2000); // Every 2 seconds
+  }
 
-        const closes = quotes
-            .map(q => q.close)
-            .filter(close => close !== null && close !== undefined);
+  checkMarketHours() {
+    const now = moment().tz('Asia/Kolkata');
+    const marketOpenTime = moment().tz('Asia/Kolkata').set({ hour: 9, minute: 15, second: 0, millisecond: 0 });
+    const marketCloseTime = moment().tz('Asia/Kolkata').set({ hour: 15, minute: 30, second: 0, millisecond: 0 });
 
-        if (closes.length < period) {
-            throw new Error(`Not enough data points (${closes.length}) for RSI calculation`);
-        }
+    this.isMarketOpen = now.isBetween(marketOpenTime, marketCloseTime);
 
-        return RSI.calculate({ values: closes, period });
-    } catch (error) {
-        console.error(`Failed to get RSI for ${symbol}:`, error.message);
-        return null;
+    if (this.isMarketOpen) {
+      logger.info('Market is open.');
+    } else {
+      logger.info('Market is closed.');
     }
+  }
+
+  getLatestPrice(symbol) {
+    return this.symbolsData[symbol]?.getLatestPrice();
+  }
+
+  getLastMinutePrice(symbol) {
+    return this.symbolsData[symbol]?.getLastMinutePrice();
+  }
 }
+
+export default MarketDataService;

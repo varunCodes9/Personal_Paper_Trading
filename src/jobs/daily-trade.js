@@ -3,10 +3,11 @@ import Trade from '../models/Trade.js';
 import Portfolio from '../models/Portfolio.js';
 import config from '../config/index.js';
 import yahooFinance from 'yahoo-finance2';
-import { getTradingSignal } from '../services/strategy.js';
 import logger from '../utils/logger.js';
-import { processNews } from '../services/news.js'; // Import processNews
+import NewsService from '../services/news.js'; // Import NewsService
 import moment from 'moment';
+import StrategyService from '../services/strategy.js';
+const strategyService = new StrategyService();
 
 const kc = new KiteConnect({
   api_key: config.ZERODHA.API_KEY,
@@ -72,7 +73,8 @@ export async function executeDailyTrades() {
     // Process news (if available) - This happens before we start trading.
     let newsData;
     try {
-      newsData = await processNews();
+      const newsService = new NewsService(); // Create an instance of NewsService
+      newsData = await newsService.processNews(); // Use the method on the instance
     } catch (newsError) {
       logger.error(`[${moment().format('YYYY-MM-DD HH:mm:ss')}] Error processing news:`, newsError);
       logger.info(`[${moment().format('YYYY-MM-DD HH:mm:ss')}] Continuing with core trading strategy.`);
@@ -90,7 +92,7 @@ export async function executeDailyTrades() {
           continue;
         }
 
-        const action = await getTradingSignal(symbol, 20, 50, 14);
+        const action = await strategyService.getTradingSignal(symbol, 20, 50, 14);
 
         // Log the trading signal
         logger.info(`[${moment().format('YYYY-MM-DD HH:mm:ss')}] Trading signal for ${symbol}: ${action} at price ${currentPrice}`);
